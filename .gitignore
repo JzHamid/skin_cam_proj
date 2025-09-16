@@ -1,0 +1,40 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.ipynb_checkpoints/
+
+# Virtual env
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Training outputs & logs
+out/
+out_skin/
+out_*/*
+logs/
+tensorboard/
+
+# Data (raw/split/augmented)
+data/
+data_*/
+*/data/
+*/data_*/
+
+# Big artifacts
+*.h5
+*.hdf5
+*.keras
+*.tflite
+*.onnx
+
+# OS cruft
+.DS_Store
+Thumbs.db
