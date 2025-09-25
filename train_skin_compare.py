@@ -15,7 +15,7 @@ Outputs: out_skin/<model_name>/
 Summary CSV: out_skin/results_summary.csv
 """
 
-import os, csv, argparse, itertools, inspect
+import os, csv, argparse, itertools, inspect, json
 from pathlib import Path
 from typing import List
 import numpy as np
@@ -155,7 +155,7 @@ def build_model(backbone: str, num_classes: int, img_size: int):
                     origin="https://storage.googleapis.com/keras-applications/efficientnetb0_notop.h5",
                     cache_subdir="models",
                 )
-                # Loads all matching weights; mismatched (like stem_conv if 1ch was inferred) are skipped
+                # Loads all matching weights; mismatched are skipped
                 base.load_weights(wpath, by_name=False, skip_mismatch=True)
                 print("[INFO] EfficientNet: partial ImageNet weights loaded (skip_mismatch).")
             except Exception as e2:
@@ -204,10 +204,12 @@ def eval_split(model, dataset, class_names: List[str]):
         pr = model.predict(xb, verbose=0)
         y_pred.extend(np.argmax(pr, axis=1))
         y_true.extend(yb.numpy())
-    rep = classification_report(y_true, y_pred, target_names=class_names, digits=4)
+    rep_txt = classification_report(
+        y_true, y_pred, target_names=class_names, digits=4, zero_division=0
+    )
     cm  = confusion_matrix(y_true, y_pred, labels=list(range(len(class_names))))
     acc = (np.trace(cm) / np.sum(cm)) if np.sum(cm) else 0.0
-    return rep, cm, float(acc)
+    return rep_txt, cm, float(acc), y_true, y_pred
 
 def plot_confusion(cm: np.ndarray, class_names: List[str], out_path: Path, title="Confusion Matrix"):
     plt.figure(figsize=(6,6))
@@ -335,15 +337,31 @@ def main():
             pass
 
         # ----- Evaluation & reports -----
-        rep_val, cm_val, val_acc = eval_split(model, val_ds, class_names)
+        # Validation
+        rep_val, cm_val, val_acc, y_true_val, y_pred_val = eval_split(model, val_ds, class_names)
         (out_dir/"validation_report.txt").write_text(
             rep_val + "\nConfusion matrix:\n" + np.array2string(cm_val), encoding="utf-8"
         )
+        # NEW: JSON dumps (val)
+        val_report = classification_report(
+            y_true_val, y_pred_val, target_names=class_names, output_dict=True, zero_division=0
+        )
+        (out_dir/"validation_report.json").write_text(json.dumps(val_report, indent=2), encoding="utf-8")
+        with open(out_dir/"val_confusion_matrix.json","w", encoding="utf-8") as f:
+            json.dump({"labels": class_names, "cm": cm_val.tolist()}, f, indent=2)
 
-        rep_test, cm_test, test_acc = eval_split(model, test_ds, class_names)
+        # Test
+        rep_test, cm_test, test_acc, y_true_test, y_pred_test = eval_split(model, test_ds, class_names)
         (out_dir/"test_report.txt").write_text(
             rep_test + "\nConfusion matrix:\n" + np.array2string(cm_test), encoding="utf-8"
         )
+        # NEW: JSON dumps (test)
+        test_report = classification_report(
+            y_true_test, y_pred_test, target_names=class_names, output_dict=True, zero_division=0
+        )
+        (out_dir/"test_report.json").write_text(json.dumps(test_report, indent=2), encoding="utf-8")
+        with open(out_dir/"test_confusion_matrix.json","w", encoding="utf-8") as f:
+            json.dump({"labels": class_names, "cm": cm_test.tolist()}, f, indent=2)
 
         # ----- Plots -----
         hist_all = {
