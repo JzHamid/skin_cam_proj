@@ -2,17 +2,21 @@
 """
 train_skin_compare.py
 
-Compare 5 CNN backbones on a local skin-rash dataset stored as:
-  data_30x30/
+Compare 5 CNN backbones on a local skin-disease dataset stored as:
+  data_raw_split_v2/
     train/<class>/*.(png|jpg|jpeg)
     val/<class>/*.(png|jpg|jpeg)
     test/<class>/*.(png|jpg|jpeg)
 
-Disk images are 30x30; we upscale to 128x128 for all models.
 Two-stage training: linear probe -> fine-tune (with min-epoch floor).
 
-Outputs: out_skin/<model_name>/
-Summary CSV: out_skin/results_summary.csv
+Per-run outputs: out_skin/<your_out_dir>/<backbone>/
+  - ckpt_head.keras, ckpt_ft.keras
+  - validation_report.txt/.json, test_report.txt/.json
+  - val_confusion_matrix.json, test_confusion_matrix.json
+  - history_accuracy.png, history_loss.png
+  - args.json
+Summary CSV for the run folder: out_skin/<your_out_dir>/results_summary.csv
 """
 
 import os, csv, argparse, itertools, inspect, json
@@ -33,7 +37,7 @@ tf.keras.backend.set_image_data_format("channels_last")
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--data_dir", required=True,
-                   help="Root with train/val/test subfolders (your 30x30 dataset).")
+                   help="Root with train/val/test subfolders.")
     p.add_argument("--models",
                    default="mobilenet_v2,inception_v3,resnet50,efficientnet_b0,densenet121",
                    help="Comma-separated backbones to run.")
@@ -45,9 +49,12 @@ def parse_args():
     p.add_argument("--patience", type=int, default=10,
                    help="EarlyStopping patience after min_epochs.")
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--out_dir", default="out_skin")
+    p.add_argument("--out_dir", default="out_skin",
+                   help="Folder to write outputs into (you can use px<size>).")
     p.add_argument("--img_size", type=int, default=128,
-               help="Target resize for loader & model input (e.g., 224 or 299).")
+                   help="Target resize for loader & model input (e.g., 96, 160, 224, 299).")
+    p.add_argument("--aug", default="off", choices=["off","light","medium"],
+                   help="Data augmentation strength for TRAINING only; val/test are clean.")
     return p.parse_args()
 
 
@@ -82,6 +89,36 @@ def make_datasets(data_dir: str, img_size: int, batch: int, seed: int):
     return train, val, test, class_names
 
 
+# ------------------------------ Augmentation ---------------------------------
+from tensorflow.keras import layers as KL
+
+def make_augment(mode: str):
+    """Return a Keras layer/pipeline used only during training."""
+    if mode == "off":
+        # Identity transform so the graph builds cleanly
+        return KL.Lambda(lambda x: x, name="aug_off")
+
+    if mode == "light":
+        return tf.keras.Sequential([
+            KL.RandomFlip("horizontal"),
+            KL.RandomRotation(0.10),
+            KL.RandomZoom(0.10),
+            KL.RandomContrast(0.10),
+        ], name="aug_light")
+
+    if mode == "medium":
+        return tf.keras.Sequential([
+            KL.RandomFlip("horizontal_and_vertical"),
+            KL.RandomRotation(0.15),
+            KL.RandomZoom(0.15),
+            KL.RandomTranslation(0.10, 0.10),
+            KL.RandomContrast(0.20),
+        ], name="aug_medium")
+
+    raise ValueError("Bad --aug")
+
+
+
 # ------------------------------ Model zoo ------------------------------------
 def _supports_kw(fn, name: str) -> bool:
     try:
@@ -89,20 +126,20 @@ def _supports_kw(fn, name: str) -> bool:
     except Exception:
         return False
 
-def build_model(backbone: str, num_classes: int, img_size: int):
+def build_model(backbone: str, num_classes: int, img_size: int, aug_mode: str):
     """
     Build classifier with a specific backbone.
     Use explicit input_shape=(img,img,3) so ImageNet weights match.
+    Augmentation is training-only via Keras preprocessing layers.
     """
     L = tf.keras.layers
 
     # Always 3 channels
     inp = L.Input((img_size, img_size, 3), name="image_rgb")
 
-    # Light aug
-    x = L.RandomFlip("horizontal", name="aug_flip")(inp)
-    x = L.RandomRotation(0.05, name="aug_rot")(x)
-    x = L.RandomContrast(0.10, name="aug_contrast")(x)
+    # Configurable augmentation (active only during training)
+    aug = make_augment(aug_mode)
+    x = aug(inp)
 
     bb = backbone.lower()
 
@@ -135,7 +172,7 @@ def build_model(backbone: str, num_classes: int, img_size: int):
     elif bb == "efficientnet_b0":
         # Preprocess to match EfficientNet’s expectations
         x_p = L.Lambda(tf.keras.applications.efficientnet.preprocess_input,
-                    name="pre_effnet")(x)
+                       name="pre_effnet")(x)
 
         Eff = tf.keras.applications.EfficientNetB0
         pretrain_source = "imagenet"
@@ -155,7 +192,6 @@ def build_model(backbone: str, num_classes: int, img_size: int):
                     origin="https://storage.googleapis.com/keras-applications/efficientnetb0_notop.h5",
                     cache_subdir="models",
                 )
-                # Loads all matching weights; mismatched are skipped
                 base.load_weights(wpath, by_name=False, skip_mismatch=True)
                 print("[INFO] EfficientNet: partial ImageNet weights loaded (skip_mismatch).")
             except Exception as e2:
@@ -281,12 +317,21 @@ def main():
 
     for backbone in wanted:
         img_size = get_img_size(backbone, args.img_size)
+
+        # Optional safety: skip Inception if too small
+        if backbone.lower() == "inception_v3" and img_size < 75:
+            print(f"[SKIP] inception_v3 requires >=75px (got {img_size}).")
+            continue
+
         train_ds, val_ds, test_ds, class_names = make_datasets(args.data_dir, img_size, args.batch, args.seed)
         num_classes = len(class_names)
 
-        model, base, unfreeze_n = build_model(backbone, num_classes, img_size)
+        model, base, unfreeze_n = build_model(backbone, num_classes, img_size, args.aug)
         out_dir = out_root / backbone
         out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save run args for traceability
+        (out_dir/"args.json").write_text(json.dumps(vars(args), indent=2), encoding="utf-8")
 
         # ----- Stage A: Linear probe -----
         base.trainable = False
@@ -342,7 +387,6 @@ def main():
         (out_dir/"validation_report.txt").write_text(
             rep_val + "\nConfusion matrix:\n" + np.array2string(cm_val), encoding="utf-8"
         )
-        # NEW: JSON dumps (val)
         val_report = classification_report(
             y_true_val, y_pred_val, target_names=class_names, output_dict=True, zero_division=0
         )
@@ -355,7 +399,6 @@ def main():
         (out_dir/"test_report.txt").write_text(
             rep_test + "\nConfusion matrix:\n" + np.array2string(cm_test), encoding="utf-8"
         )
-        # NEW: JSON dumps (test)
         test_report = classification_report(
             y_true_test, y_pred_test, target_names=class_names, output_dict=True, zero_division=0
         )
