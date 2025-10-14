@@ -1,0 +1,20 @@
+                   precision    recall  f1-score   support
+
+atopic_dermatitis     0.8649    0.8889    0.8767        72
+         impetigo     1.0000    1.0000    1.0000        48
+     prickly_heat     1.0000    1.0000    1.0000        20
+sarcoptes_scabiei     0.8889    0.6667    0.7619        24
+   tinea_corporis     0.7321    0.7885    0.7593        52
+            warts     0.7692    0.7692    0.7692        13
+
+         accuracy                         0.8690       229
+        macro avg     0.8759    0.8522    0.8612       229
+     weighted avg     0.8719    0.8690    0.8685       229
+
+Confusion matrix:
+[[64  0  0  1  7  0]
+ [ 0 48  0  0  0  0]
+ [ 0  0 20  0  0  0]
+ [ 0  0  0 16  6  2]
+ [ 9  0  0  1 41  1]
+ [ 1  0  0  0  2 10]]

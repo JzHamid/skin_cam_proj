@@ -1,0 +1,51 @@
+{
+  "atopic_dermatitis": {
+    "precision": 0.8333333333333334,
+    "recall": 0.9722222222222222,
+    "f1-score": 0.8974358974358975,
+    "support": 72.0
+  },
+  "impetigo": {
+    "precision": 0.9795918367346939,
+    "recall": 1.0,
+    "f1-score": 0.9896907216494846,
+    "support": 48.0
+  },
+  "prickly_heat": {
+    "precision": 0.8695652173913043,
+    "recall": 1.0,
+    "f1-score": 0.9302325581395349,
+    "support": 20.0
+  },
+  "sarcoptes_scabiei": {
+    "precision": 0.9285714285714286,
+    "recall": 0.5416666666666666,
+    "f1-score": 0.6842105263157895,
+    "support": 24.0
+  },
+  "tinea_corporis": {
+    "precision": 0.8043478260869565,
+    "recall": 0.7115384615384616,
+    "f1-score": 0.7551020408163265,
+    "support": 52.0
+  },
+  "warts": {
+    "precision": 0.7692307692307693,
+    "recall": 0.7692307692307693,
+    "f1-score": 0.7692307692307693,
+    "support": 13.0
+  },
+  "accuracy": 0.8646288209606987,
+  "macro avg": {
+    "precision": 0.8641067352247475,
+    "recall": 0.8324430199430198,
+    "f1-score": 0.8376504189313003,
+    "support": 229.0
+  },
+  "weighted avg": {
+    "precision": 0.8669149072197704,
+    "recall": 0.8646288209606987,
+    "f1-score": 0.8576923544601681,
+    "support": 229.0
+  }
+}

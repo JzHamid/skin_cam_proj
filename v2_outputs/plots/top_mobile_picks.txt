@@ -1,0 +1,6 @@
+Top mobile-ready configs (score ↓):
+- aug_light | mobilenet_v2 @ px112 | acc=0.667, ms/img=13.1, params=2,265,670
+- aug_light | mobilenet_v2 @ px128 | acc=0.708, ms/img=10.1, params=2,265,670
+- aug_light | mobilenet_v2 @ px160 | acc=0.800, ms/img=10.8, params=2,265,670
+- aug_light | mobilenet_v2 @ px192 | acc=0.758, ms/img=12.6, params=2,265,670
+- aug_light | mobilenet_v2 @ px224 | acc=0.742, ms/img=14.5, params=2,265,670

@@ -1,0 +1,6 @@
+atopic_dermatitis
+impetigo
+prickly_heat
+sarcoptes_scabiei
+tinea_corporis
+warts
